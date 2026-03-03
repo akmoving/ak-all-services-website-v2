@@ -1,813 +1,773 @@
-
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import { useMemo, useState } from "react";
 
 type Lang = "en" | "es";
 type PackageKey = "base" | "standard" | "premium";
 
-const PHONE_E164 = "17274923881"; // wa.me uses digits only (no +)
 const DISPLAY_PHONE = "(727) 492-3881";
+const WHATSAPP_PHONE_DIGITS = "17274923881"; // 1 + area + number
 
-const INCLUDED_MILES = 20;
-const EXTRA_MILE_PRICE = 3;
+// Local detection (your rule)
+const LOCAL_MIN = 35; // reference band start
+const LOCAL_MAX = 45; // hard cap local
+
+const EXTRA_MILE_PRICE = 3; // $ per mile after included miles
+const DEPOSIT_RATE = 0.3; // 30%
+
+// Pricing knobs (simple + predictable; you can tune later)
+const BEDROOM_ADD = 150; // per extra bedroom after 1
+const STAIRS_FEE_PER_FLIGHT = 50; // only if no elevator
+
+// Long-distance estimator (rough, but automated)
+const LD_MIN = 3500;
+const LD_MAX = 7000;
+// We map miles 46..300 to 3500..7000, clamp.
+function estimateLongDistance(miles: number) {
+  const m = Math.max(46, Math.min(300, miles));
+  const t = (m - 46) / (300 - 46);
+  const est = LD_MIN + t * (LD_MAX - LD_MIN);
+  return Math.round(est / 25) * 25; // round to nearest $25
+}
+
+function money(n: number) {
+  return n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+}
+
+const TEXT = {
+  en: {
+    brandLine:
+      "Premium moving services across Tampa and beyond. Structured pricing. Fully insured. Built for precision and reliability.",
+    areasLine: "Tampa • Brandon • Clearwater • St. Petersburg • Wesley Chapel",
+    nowServing: "Also serving Orlando & Miami (and surrounding areas) from Tampa.",
+    choose: "Choose Your Experience",
+    packages: "Packages",
+    tapToOpen: "Tap a package to see details",
+    extrasTitle: "Extras (optional)",
+    extrasNote:
+      "Extras apply to any package. Recommended for Essential when you need flexibility.",
+    calculatorTitle: "Instant Estimate",
+    calcNote:
+      "Final price may vary after confirming inventory, access and distance. Everything is confirmed via WhatsApp.",
+    longTitle: "Long-distance (Florida)",
+    longNote:
+      "Long-distance moves require reservation 5–7 days in advance. Price depends on inventory, stairs/elevator access and destination area.",
+    localDetect: "Local distance detection",
+    localYes: "Local move (≤ 45 miles)",
+    localBand: "Your local band is 35–45 miles.",
+    localNo: "Long-distance detected (> 45 miles)",
+    fields: {
+      lang: "Language",
+      bedrooms: "Size (bedrooms)",
+      stairs: "Stairs (no elevator)",
+      elevator: "Elevator available",
+      miles: "Total miles (approx.)",
+      pickup: "Pickup address",
+      dropoff: "Delivery address",
+      day: "Preferred day",
+      time: "Preferred time",
+    },
+    buttons: {
+      whatsapp: "Request quote via WhatsApp",
+      call: "Call now",
+      openDetails: "View details",
+      close: "Close",
+    },
+    labels: {
+      estimatedTotal: "Estimated total",
+      deposit: "Deposit",
+      extraMiles: "Extra miles",
+      includedMiles: "Included miles",
+      stairsFee: "Stairs fee",
+      bedroomAdd: "Bedrooms add",
+      longDistanceEstimate: "Estimated long-distance",
+    },
+  },
+  es: {
+    brandLine:
+      "Servicios de mudanza premium desde Tampa y hacia afuera. Precios estructurados. Asegurados. Precisión y confiabilidad.",
+    areasLine: "Tampa • Brandon • Clearwater • St. Petersburg • Wesley Chapel",
+    nowServing: "También abrimos Orlando y Miami (y zonas aledañas) desde Tampa.",
+    choose: "Elige tu experiencia",
+    packages: "Paquetes",
+    tapToOpen: "Toca un paquete para ver detalles",
+    extrasTitle: "Extras (opcional)",
+    extrasNote:
+      "Los extras aplican a cualquier paquete. Recomendado para Esencial si necesitas flexibilidad.",
+    calculatorTitle: "Estimado al instante",
+    calcNote:
+      "El precio final puede variar tras confirmar inventario, acceso y distancia. Todo se confirma por WhatsApp.",
+    longTitle: "Viajes largos (Florida)",
+    longNote:
+      "Los viajes largos requieren reserva 5–7 días antes. El precio depende del inventario, escaleras/elevador y el área de destino.",
+    localDetect: "Detección de área local",
+    localYes: "Mudanza local (≤ 45 millas)",
+    localBand: "Tu banda local es 35–45 millas.",
+    localNo: "Se detectó viaje largo (> 45 millas)",
+    fields: {
+      lang: "Idioma",
+      bedrooms: "Tamaño (habitaciones)",
+      stairs: "Escaleras (sin elevador)",
+      elevator: "Hay elevador",
+      miles: "Millas totales (aprox.)",
+      pickup: "Dirección de recogida",
+      dropoff: "Dirección de entrega",
+      day: "Día preferido",
+      time: "Hora preferida",
+    },
+    buttons: {
+      whatsapp: "Pedir cotización por WhatsApp",
+      call: "Llama ahora",
+      openDetails: "Ver detalles",
+      close: "Cerrar",
+    },
+    labels: {
+      estimatedTotal: "Total estimado",
+      deposit: "Depósito",
+      extraMiles: "Millas extra",
+      includedMiles: "Millas incluidas",
+      stairsFee: "Cargo por escaleras",
+      bedroomAdd: "Cargo por habitaciones",
+      longDistanceEstimate: "Estimado viaje largo",
+    },
+  },
+} satisfies Record<Lang, any>;
 
 const PACKAGES: Record<
   PackageKey,
   {
     price: number;
+    includedMiles: number;
     label: { en: string; es: string };
     short: { en: string; es: string };
     includes: { en: string[]; es: string[] };
+    excludes: { en: string[]; es: string[] };
   }
 > = {
   base: {
     price: 1050,
-    label: { en: "Base", es: "Base" },
-    short: { en: "Clean + fast.", es: "Limpia + rápida." },
+    includedMiles: 20,
+    label: { en: "Essential Move", es: "Mudanza Esencial" },
+    short: { en: "Simple, clear and efficient.", es: "Simple, clara y eficiente." },
     includes: {
-      en: ["Truck + 3 movers", "Protection-first handling", `${INCLUDED_MILES} miles included`],
-      es: ["Camión + 3 trabajadores", "Manejo con protección primero", `${INCLUDED_MILES} millas incluidas`],
+      en: ["Truck + 3 movers", "Standard furniture protection", "Up to 20 miles included"],
+      es: ["Camión + 3 trabajadores", "Protección estándar de muebles", "Hasta 20 millas incluidas"],
+    },
+    excludes: {
+      en: [
+        "Full packing (kitchen / fragile) — add-on",
+        "Extra boxes beyond included amount",
+        "TV wall installation (Standard = removal only)",
+        "Stairs / no-elevator heavy carries may affect final quote",
+        "Long-distance route pricing (separate section)",
+      ],
+      es: [
+        "Empaque completo (cocina / frágiles) — adicional",
+        "Cajas extra por encima de lo incluido",
+        "Instalación de TV en pared (Standard = solo desmontaje)",
+        "Escaleras / sin elevador puede cambiar el estimado",
+        "Viajes largos por ruta (sección aparte)",
+      ],
     },
   },
   standard: {
     price: 1275,
-    label: { en: "Standard (Recommended)", es: "Standard (Recomendado)" },
-    short: { en: "Most popular balance.", es: "El balance más popular." },
+    includedMiles: 25,
+    label: { en: "Professional Move", es: "Mudanza Profesional" },
+    short: { en: "Best balance of protection and value.", es: "Balance ideal entre protección y valor." },
     includes: {
       en: [
-        "Everything in Base",
-        "Partial packing (kitchen + fragile)",
-        "Tape included",
-        "Extra protection level",
+        "Everything in Essential",
+        "Partial packing (kitchen & fragile — limited)",
+        "Extra protection materials",
+        "Up to 25 miles included",
       ],
-      es: ["Todo lo del Base", "Empaque parcial (cocina + frágiles)", "Tape incluido", "Protección extendida"],
+      es: [
+        "Todo lo incluido en Esencial",
+        "Empaque parcial (cocina y frágiles — limitado)",
+        "Material adicional de protección",
+        "Hasta 25 millas incluidas",
+      ],
+    },
+    excludes: {
+      en: [
+        "Full packing (kitchen / fragile) — add-on",
+        "Extra boxes beyond included amount",
+        "TV wall installation (Standard = removal only)",
+        "Stairs / no-elevator heavy carries may affect final quote",
+        "Long-distance route pricing (separate section)",
+      ],
+      es: [
+        "Empaque completo (cocina / frágiles) — adicional",
+        "Cajas extra por encima de lo incluido",
+        "Instalación de TV en pared (Standard = solo desmontaje)",
+        "Escaleras / sin elevador puede cambiar el estimado",
+        "Viajes largos por ruta (sección aparte)",
+      ],
     },
   },
   premium: {
-    price: 1475,
-    label: { en: "Premium (Most Popular)", es: "Premium (Más popular)" },
-    short: { en: "Max protection + priority.", es: "Máxima protección + prioridad." },
+    price: 1550,
+    includedMiles: 30,
+    label: { en: "Premium Move", es: "Mudanza Premium" },
+    short: { en: "Priority scheduling + premium care.", es: "Prioridad en agenda + cuidado premium." },
     includes: {
       en: [
-        "Everything in Standard",
-        "Priority scheduling (when available)",
-        "More protective materials",
-        "More careful handling policy",
+        "Everything in Professional",
+        "Priority scheduling",
+        "Premium protection materials",
+        "Furniture organization at destination",
+        "TV wall installation (if approved in advance)",
+        "Up to 30 miles included",
       ],
-      es: ["Todo lo del Standard", "Prioridad de agenda (si hay disponibilidad)", "Más materiales de protección", "Política de manejo más cuidadosa"],
+      es: [
+        "Todo lo incluido en Profesional",
+        "Prioridad en agenda",
+        "Materiales premium de protección",
+        "Organización avanzada de muebles en destino",
+        "Instalación de TV en pared (si se aprueba antes)",
+        "Hasta 30 millas incluidas",
+      ],
+    },
+    excludes: {
+      en: [
+        "Full packing (kitchen / fragile) — add-on",
+        "Extra boxes beyond included amount",
+        "Stairs / no-elevator heavy carries may affect final quote",
+        "Long-distance route pricing (separate section)",
+      ],
+      es: [
+        "Empaque completo (cocina / frágiles) — adicional",
+        "Cajas extra por encima de lo incluido",
+        "Escaleras / sin elevador puede cambiar el estimado",
+        "Viajes largos por ruta (sección aparte)",
+      ],
     },
   },
 };
 
-const EXTRAS = [
-  { key: "boxMedium", en: "Medium box", es: "Caja mediana", price: 6, type: "qty" as const },
-  { key: "boxLarge", en: "Large box", es: "Caja grande", price: 8, type: "qty" as const },
-  { key: "boxReinforced", en: "Reinforced box", es: "Caja reforzada", price: 14, type: "qty" as const },
-  { key: "stretchWrap", en: "Stretch wrap roll", es: "Rollo stretch wrap", price: 75, type: "qty" as const },
-  { key: "tvBox", en: "Extra TV box", es: "Caja TV adicional", price: 65, type: "qty" as const },
-  { key: "extraStop", en: "Extra stop", es: "Parada adicional", price: 175, type: "toggle" as const },
-  { key: "extraHourAfter8", en: "Extra hour (after 8h)", es: "Hora adicional (después 8h)", price: 150, type: "toggle" as const },
+type Extra = {
+  key: string;
+  price: number;
+  type: "qty" | "toggle";
+  en: string;
+  es: string;
+};
+
+const EXTRAS: Extra[] = [
+  { key: "boxMedium", price: 6, type: "qty", en: "Medium box", es: "Caja mediana" },
+  { key: "boxLarge", price: 8, type: "qty", en: "Large box", es: "Caja grande" },
+  { key: "boxReinforced", price: 14, type: "qty", en: "Reinforced box", es: "Caja reforzada" },
+  { key: "stretchWrap", price: 75, type: "toggle", en: "Stretch wrap roll", es: "Rollo de stretch wrap" },
+  { key: "tvBox", price: 65, type: "toggle", en: "Extra TV box", es: "Caja TV adicional" },
+  { key: "extraStop", price: 175, type: "toggle", en: "Extra stop", es: "Parada adicional" },
+  { key: "extraHourAfter8", price: 150, type: "toggle", en: "Extra hour (after 8h)", es: "Hora adicional (después 8h)" },
 ];
 
-const BLOCKED_ISO_DATES = new Set<string>([
-  // Ejemplos: "2026-03-01", "2026-03-05"
-]);
-
-function money(n: number) {
-  return n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-}
-
-function isSunday(isoDate: string) {
-  if (!isoDate) return false;
-  const d = new Date(isoDate + "T00:00:00");
-  return d.getDay() === 0; // Sunday
-}
-
-function isPastDate(isoDate: string) {
-  if (!isoDate) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const d = new Date(isoDate + "T00:00:00");
-  return d < today;
-}
-
-function clampInt(v: string, min = 0, max = 999) {
-  const n = Number(v);
-  if (Number.isNaN(n)) return min;
-  return Math.max(min, Math.min(max, Math.floor(n)));
-}
-
 export default function Page() {
-  const [lang, setLang] = useState<Lang>("es");
+  const [lang, setLang] = useState<Lang>("en");
+  const t = TEXT[lang];
 
-  const [activePkg, setActivePkg] = useState<PackageKey>("standard");
-  const [beds, setBeds] = useState<number>(1);
+  const [selected, setSelected] = useState<PackageKey>("premium");
+  const [openDetails, setOpenDetails] = useState<PackageKey | null>(null);
 
+  const [bedrooms, setBedrooms] = useState<number>(1);
   const [stairs, setStairs] = useState<number>(0);
-  const [hasElevator, setHasElevator] = useState<boolean>(false);
+  const [elevator, setElevator] = useState<boolean>(false);
+  const [miles, setMiles] = useState<number>(35);
 
-  const [totalMiles, setTotalMiles] = useState<number>(INCLUDED_MILES);
-
-  const [dateISO, setDateISO] = useState<string>("");
-  const [timeStr, setTimeStr] = useState<string>("08:00");
-
+  const [day, setDay] = useState<string>("");
+  const [time, setTime] = useState<string>("08:00");
   const [pickup, setPickup] = useState<string>("");
   const [dropoff, setDropoff] = useState<string>("");
 
-  const [extrasQty, setExtrasQty] = useState<Record<string, number>>({
+  const [extraQty, setExtraQty] = useState<Record<string, number>>({
     boxMedium: 0,
     boxLarge: 0,
     boxReinforced: 0,
-    stretchWrap: 0,
-    tvBox: 0,
   });
-
-  const [extrasToggle, setExtrasToggle] = useState<Record<string, boolean>>({
+  const [extraToggle, setExtraToggle] = useState<Record<string, boolean>>({
+    stretchWrap: false,
+    tvBox: false,
     extraStop: false,
     extraHourAfter8: false,
   });
 
-  // Responsive state
-  const [isMobile, setIsMobile] = useState<boolean>(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 900px)");
-    const handler = () => setIsMobile(mq.matches);
-    handler();
-    mq.addEventListener?.("change", handler);
-    return () => mq.removeEventListener?.("change", handler);
-  }, []);
+  const pkg = PACKAGES[selected];
 
-  const t = useMemo(() => {
-    const dict = {
-      en: {
-        brandLine: "Premium Moving • Packing • Junk Removal",
-        headline: "Instant Quote",
-        subhead: "A clean estimate in seconds — polished experience, real service. No cheap vibes.",
-        chip1: "Tampa Bay + surrounding",
-        chip2: "Average response time: under 5 minutes.",
-        chip3: "Secure your date today. Limited weekly availability.",
-        getEstimate: "Get your estimate",
-        package: "Package",
-        beds: "Home size (bedrooms)",
-        stairsAccess: "Stairs (no elevator)",
-        elevator: "Elevator available",
-        miles: "Total miles (approx.)",
-        included: `Includes up to ${INCLUDED_MILES} miles`,
-        extraMiles: "Extra miles",
-        date: "Preferred date",
-        time: "Preferred time",
-        pickup: "Pickup address",
-        dropoff: "Delivery address",
-        extras: "Extras (optional)",
-        summary: "Summary",
-        total: "Estimated total",
-        deposit: "Deposit",
-        depositNote: "30% to reserve (Zelle). We send details via WhatsApp.",
-        ctaWA: "Request quote on WhatsApp",
-        ctaCall: "Call Now",
-        notAvailable: "That date is not available. Please choose another.",
-        noSunday: "We do not work Sundays.",
-        note:
-          "Note: Final price may change after confirming inventory, access and distance. Everything is confirmed via WhatsApp.",
-        areasTitle: "Areas",
-        areas: ["Tampa", "Brandon", "Clearwater", "St. Petersburg", "Wesley Chapel"],
-        contactTitle: "Contact",
-        whyTitle: "Why A&K feels premium",
-        why: [
-          "Fast response (minutes, not hours)",
-          "Protection-first handling",
-          "Transparent structure",
-          "Professional communication",
-        ],
-        language: "Language",
-      },
-      es: {
-        brandLine: "Mudanza Premium • Empaque • Junk Removal",
-        headline: "Estimado al instante",
-        subhead: "Estimado limpio en segundos — experiencia fina, servicio real. Sin reguero.",
-        chip1: "Tampa Bay + alrededores",
-        chip2: "Tiempo de respuesta promedio: menos de 5 min.",
-        chip3: "Asegura tu fecha hoy. Cupos semanales limitados.",
-        getEstimate: "Estima tu mudanza",
-        package: "Paquete",
-        beds: "Tamaño (habitaciones)",
-        stairsAccess: "Escaleras (sin elevador)",
-        elevator: "Hay elevador",
-        miles: "Millas totales (aprox.)",
-        included: `Incluye hasta ${INCLUDED_MILES} millas`,
-        extraMiles: "Millas extra",
-        date: "Día preferido",
-        time: "Hora preferida",
-        pickup: "Dirección de recogida",
-        dropoff: "Dirección de entrega",
-        extras: "Extras (opcional)",
-        summary: "Resumen",
-        total: "Total estimado",
-        deposit: "Depósito",
-        depositNote: "30% para reservar (Zelle). Te mandamos los datos por WhatsApp.",
-        ctaWA: "Pedir cotización por WhatsApp",
-        ctaCall: "Llama ahora",
-        notAvailable: "Ese día no está disponible. Cambia la fecha.",
-        noSunday: "No trabajamos domingo.",
-        note:
-          "Nota: El precio final puede variar tras confirmar inventario, acceso y distancia. Todo se confirma por WhatsApp.",
-        areasTitle: "Áreas",
-        areas: ["Tampa", "Brandon", "Clearwater", "St. Petersburg", "Wesley Chapel"],
-        contactTitle: "Contacto",
-        whyTitle: "Por qué A&K se siente premium",
-        why: [
-          "Respuesta rápida (minutos, no horas)",
-          "Protección primero",
-          "Estructura clara",
-          "Comunicación profesional",
-        ],
-        language: "Idioma",
-      },
-    } as const;
+  const isLocal = miles <= LOCAL_MAX;
 
-    return dict[lang];
-  }, [lang]);
-
-  const extraMiles = Math.max(0, totalMiles - INCLUDED_MILES);
-  const milesFee = extraMiles * EXTRA_MILE_PRICE;
-
-  // Simple stairs fee model (tú lo ajustas luego si quieres)
-  const stairsFee = useMemo(() => {
-    if (hasElevator) return 0;
-    // $75 por piso (0-4) ejemplo. Cambia si quieres.
-    return stairs * 75;
-  }, [stairs, hasElevator]);
-
-  const extrasFee = useMemo(() => {
-    let sum = 0;
-    for (const item of EXTRAS) {
-      if (item.type === "qty") sum += (extrasQty[item.key] || 0) * item.price;
-      if (item.type === "toggle") sum += (extrasToggle[item.key] ? item.price : 0);
+  const extrasTotal = useMemo(() => {
+    let total = 0;
+    for (const ex of EXTRAS) {
+      if (ex.type === "qty") total += (extraQty[ex.key] || 0) * ex.price;
+      if (ex.type === "toggle" && extraToggle[ex.key]) total += ex.price;
     }
-    return sum;
-  }, [extrasQty, extrasToggle]);
+    return total;
+  }, [extraQty, extraToggle]);
 
-  const basePrice = PACKAGES[activePkg].price;
+  const extraMiles = Math.max(0, miles - pkg.includedMiles);
+  const extraMilesCost = extraMiles * EXTRA_MILE_PRICE;
 
-  const estimate = useMemo(() => {
-    // Beds influence (ligero, para que no sea “solo una calculadora”)
-    const bedsFactor = Math.max(0, beds - 1) * 80; // +80 por habitación extra
-    return basePrice + bedsFactor + stairsFee + milesFee + extrasFee;
-  }, [basePrice, beds, stairsFee, milesFee, extrasFee]);
+  const bedroomAddCost = Math.max(0, bedrooms - 1) * BEDROOM_ADD;
 
-  const deposit = Math.round(estimate * 0.3);
+  const stairsFee = !elevator && stairs > 0 ? stairs * STAIRS_FEE_PER_FLIGHT : 0;
 
-  const dateBlocked = dateISO ? BLOCKED_ISO_DATES.has(dateISO) : false;
-  const dateInvalid = !!dateISO && (isPastDate(dateISO) || isSunday(dateISO) || dateBlocked);
+  const localEstimate = pkg.price + extrasTotal + extraMilesCost + bedroomAddCost + stairsFee;
 
-  const extrasLines = useMemo(() => {
+  const longDistanceEstimate = useMemo(() => estimateLongDistance(miles), [miles]);
+
+  const finalEstimate = isLocal ? localEstimate : longDistanceEstimate;
+
+  const deposit = Math.round(finalEstimate * DEPOSIT_RATE);
+
+  const includedMilesLine = `${t.labels.includedMiles}: ${pkg.includedMiles}`;
+  const extraMilesLine = `${t.labels.extraMiles}: ${extraMiles} × $${EXTRA_MILE_PRICE} = ${money(extraMilesCost)}`;
+  const bedroomLine = `${t.labels.bedroomAdd}: ${Math.max(0, bedrooms - 1)} × ${money(BEDROOM_ADD)} = ${money(
+    bedroomAddCost
+  )}`;
+  const stairsLine = `${t.labels.stairsFee}: ${stairs} × ${money(STAIRS_FEE_PER_FLIGHT)} = ${money(stairsFee)}`;
+
+  const extrasLines = EXTRAS.map((ex) => {
+    if (ex.type === "qty") {
+      const q = extraQty[ex.key] || 0;
+      if (!q) return null;
+      return `• ${(lang === "en" ? ex.en : ex.es)}: ${q} × ${money(ex.price)} = ${money(q * ex.price)}`;
+    }
+    const on = !!extraToggle[ex.key];
+    if (!on) return null;
+    return `• ${(lang === "en" ? ex.en : ex.es)}: ${money(ex.price)}`;
+  }).filter(Boolean) as string[];
+
+  const waText = useMemo(() => {
     const lines: string[] = [];
-    for (const item of EXTRAS) {
-      if (item.type === "qty") {
-        const q = extrasQty[item.key] || 0;
-        if (q > 0) lines.push(`${lang === "en" ? item.en : item.es}: ${q} x ${money(item.price)} = ${money(q * item.price)}`);
-      } else {
-        if (extrasToggle[item.key]) lines.push(`${lang === "en" ? item.en : item.es}: +${money(item.price)}`);
-      }
-    }
-    return lines;
-  }, [extrasQty, extrasToggle, lang]);
+    lines.push(`A&K All Services, Inc.`);
+    lines.push(lang === "en" ? `Requesting a quote:` : `Pidiendo cotización:`);
+    lines.push(`— ${lang === "en" ? "Package" : "Paquete"}: ${pkg.label[lang]} (${money(pkg.price)})`);
+    lines.push(`— ${t.fields.bedrooms}: ${bedrooms}`);
+    lines.push(`— ${t.fields.miles}: ${miles}`);
+    lines.push(`— ${t.fields.stairs}: ${stairs}`);
+    lines.push(`— ${t.fields.elevator}: ${elevator ? "Yes" : "No"}`);
+    if (day) lines.push(`— ${t.fields.day}: ${day}`);
+    if (time) lines.push(`— ${t.fields.time}: ${time}`);
+    if (pickup) lines.push(`— ${t.fields.pickup}: ${pickup}`);
+    if (dropoff) lines.push(`— ${t.fields.dropoff}: ${dropoff}`);
 
-  const message = useMemo(() => {
-    const pkg = PACKAGES[activePkg];
-    const pkgName = lang === "en" ? pkg.label.en : pkg.label.es;
-
-    const parts: string[] = [];
-    parts.push(lang === "en" ? "Hello, I'd like to confirm availability for this move." : "Hola, quiero confirmar disponibilidad para esta mudanza.");
-    parts.push("");
-    parts.push(`${lang === "en" ? "Package" : "Paquete"}: ${pkgName}`);
-    parts.push(`${lang === "en" ? "Bedrooms" : "Habitaciones"}: ${beds}`);
-    parts.push(`${lang === "en" ? "Stairs (no elevator)" : "Escaleras (sin elevador)"}: ${hasElevator ? (lang === "en" ? "Elevator available" : "Hay elevador") : stairs}`);
-    parts.push(`${lang === "en" ? "Miles (approx.)" : "Millas (aprox.)"}: ${totalMiles} (${lang === "en" ? "extra" : "extra"}: ${extraMiles})`);
-    parts.push(`${lang === "en" ? "Preferred date" : "Día preferido"}: ${dateISO || "-"}`);
-    parts.push(`${lang === "en" ? "Preferred time" : "Hora preferida"}: ${timeStr || "-"}`);
-    parts.push(`${lang === "en" ? "Pickup" : "Recogida"}: ${pickup || "-"}`);
-    parts.push(`${lang === "en" ? "Delivery" : "Entrega"}: ${dropoff || "-"}`);
-
+    lines.push("");
+    lines.push(lang === "en" ? "Breakdown:" : "Desglose:");
+    lines.push(`• ${includedMilesLine}`);
+    lines.push(`• ${extraMilesLine}`);
+    lines.push(`• ${bedroomLine}`);
+    if (stairsFee > 0) lines.push(`• ${stairsLine}`);
     if (extrasLines.length) {
-      parts.push("");
-      parts.push(lang === "en" ? "Extras:" : "Extras:");
-      extrasLines.forEach((l) => parts.push(`- ${l}`));
+      lines.push(lang === "en" ? "• Extras:" : "• Extras:");
+      lines.push(...extrasLines);
     }
 
-    parts.push("");
-    parts.push(`${lang === "en" ? "Estimated total" : "Total estimado"}: ${money(estimate)}`);
-    parts.push(`${lang === "en" ? "Deposit (30%)" : "Depósito (30%)"}: ${money(deposit)} (${lang === "en" ? "Zelle" : "Zelle"})`);
-    parts.push(lang === "en" ? "Deposit is via Zelle (details in WhatsApp)." : "El depósito es por Zelle (te mandamos los datos por WhatsApp).");
+    lines.push("");
+    if (isLocal) {
+      lines.push(`${t.labels.estimatedTotal}: ${money(localEstimate)}`);
+    } else {
+      lines.push(`${t.labels.longDistanceEstimate}: ${money(longDistanceEstimate)}`);
+      lines.push(lang === "en" ? "Reservation required 5–7 days in advance." : "Reserva requerida 5–7 días antes.");
+    }
+    lines.push(`${t.labels.deposit} (30%): ${money(deposit)}`);
+    lines.push("");
+    lines.push(lang === "en" ? "Please confirm inventory details by WhatsApp." : "Confirma inventario por WhatsApp, por favor.");
 
-    return parts.join("\n");
-  }, [activePkg, beds, hasElevator, stairs, totalMiles, extraMiles, dateISO, timeStr, pickup, dropoff, extrasLines, estimate, deposit, lang]);
+    return lines.join("\n");
+  }, [
+    lang,
+    pkg,
+    bedrooms,
+    miles,
+    stairs,
+    elevator,
+    day,
+    time,
+    pickup,
+    dropoff,
+    includedMilesLine,
+    extraMilesLine,
+    bedroomLine,
+    stairsLine,
+    stairsFee,
+    extrasLines,
+    isLocal,
+    localEstimate,
+    longDistanceEstimate,
+    deposit,
+    t,
+  ]);
 
-  const whatsappLink = useMemo(() => {
-    return `https://wa.me/${PHONE_E164}?text=${encodeURIComponent(message)}`;
-  }, [message]);
-
-  // Computed layout styles (NO functions inside styles object)
-  const gridShellStyle: React.CSSProperties = useMemo(() => {
-    return {
-      display: "grid",
-      gridTemplateColumns: isMobile ? "1fr" : "1.35fr .85fr",
-      gap: 14,
-      width: "min(1120px, 100%)",
-    };
-  }, [isMobile]);
-
-  const pkgRowStyle: React.CSSProperties = useMemo(() => {
-    return {
-      display: "grid",
-      gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)",
-      gap: 10,
-    };
-  }, [isMobile]);
-
-  const styles: Record<string, React.CSSProperties> = {
-    page: {
-      minHeight: "100vh",
-      padding: 18,
-      display: "grid",
-      placeItems: "center",
-      background:
-        "radial-gradient(1200px 700px at 20% 10%, rgba(255,215,0,.08), transparent 60%), radial-gradient(900px 500px at 80% 30%, rgba(255,200,80,.06), transparent 55%), #070707",
-      color: "rgba(255,255,255,.92)",
-      fontFamily:
-        'ui-serif, "Times New Roman", Georgia, Cambria, "Playfair Display", serif',
-    },
-    card: {
-      background: "rgba(12,12,12,.92)",
-      border: "1px solid rgba(255,215,0,.18)",
-      borderRadius: 18,
-      padding: 18,
-      boxShadow: "0 18px 60px rgba(0,0,0,.55)",
-      backdropFilter: "blur(10px)",
-    },
-    topCard: {
-      marginBottom: 14,
-    },
-    topRow: {
-      display: "flex",
-      gap: 14,
-      alignItems: "center",
-      justifyContent: "space-between",
-      flexWrap: "wrap",
-    },
-    brand: { display: "flex", gap: 12, alignItems: "center", minWidth: 260 },
-    logoBox: {
-      width: 54,
-      height: 54,
-      borderRadius: 14,
-      background: "rgba(255,215,0,.10)",
-      border: "1px solid rgba(255,215,0,.22)",
-      display: "grid",
-      placeItems: "center",
-      overflow: "hidden",
-      flex: "0 0 auto",
-    },
-    logoImg: { width: 44, height: 44, objectFit: "contain" },
-    brandText: { display: "grid", gap: 2 },
-    company: { fontSize: 28, fontWeight: 800, letterSpacing: -0.2, lineHeight: 1.05 },
-    sub: { fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial', opacity: 0.88 },
-    langWrap: { display: "grid", gap: 6, justifyItems: "end" },
-    langLabel: { fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial', opacity: 0.75, fontSize: 13 },
-    select: {
-      background: "rgba(15,15,18,.9)",
-      color: "rgba(255,255,255,.92)",
-      border: "1px solid rgba(255,215,0,.18)",
-      borderRadius: 14,
-      padding: "10px 12px",
-      outline: "none",
-      fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial',
-    },
-    hero: { marginTop: 14, display: "grid", gap: 10 },
-    headline: { fontSize: 52, fontWeight: 900, letterSpacing: -1.2, lineHeight: 1.02 },
-    subhead: { fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial', fontSize: 16, opacity: 0.9, maxWidth: 720 },
-    chips: { display: "flex", gap: 10, flexWrap: "wrap", marginTop: 8 },
-    chip: {
-      borderRadius: 999,
-      border: "1px solid rgba(255,215,0,.16)",
-      background: "rgba(255,255,255,.03)",
-      padding: "10px 14px",
-      fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial',
-      fontSize: 14,
-      opacity: 0.92,
-    },
-    sectionTitle: {
-      fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial',
-      fontSize: 20,
-      fontWeight: 900,
-      margin: "6px 0 12px",
-    },
-    pkgCard: {
-      borderRadius: 16,
-      border: "1px solid rgba(255,255,255,.10)",
-      background: "rgba(255,255,255,.03)",
-      padding: 12,
-      cursor: "pointer",
-      transition: "transform .12s ease",
-      userSelect: "none",
-    },
-    pkgName: { fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial', fontWeight: 900, marginBottom: 4 },
-    pkgPrice: { color: "rgba(255,215,0,.92)", fontWeight: 900, fontSize: 18 },
-    fields: { marginTop: 14, display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 },
-    field: { display: "grid", gap: 6 },
-    label: { fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial', opacity: 0.78, fontSize: 13 },
-    input: {
-      background: "rgba(15,15,18,.92)",
-      border: "1px solid rgba(255,215,0,.18)",
-      borderRadius: 14,
-      padding: "12px 12px",
-      outline: "none",
-      color: "rgba(255,255,255,.92)",
-      fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial',
-      width: "100%",
-    },
-    hint: { fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial', opacity: 0.55, fontSize: 12, marginTop: 2 },
-    accessRow: { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" },
-    check: {
-      display: "flex",
-      gap: 10,
-      alignItems: "center",
-      padding: "10px 12px",
-      borderRadius: 14,
-      border: "1px solid rgba(255,215,0,.18)",
-      background: "rgba(255,255,255,.03)",
-      fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial',
-    },
-    extrasGrid: { marginTop: 12, display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 },
-    extraCard: {
-      borderRadius: 16,
-      border: "1px solid rgba(255,255,255,.10)",
-      background: "rgba(255,255,255,.03)",
-      padding: 12,
-      display: "grid",
-      gap: 8,
-    },
-    extraTop: { display: "flex", justifyContent: "space-between", gap: 10 },
-    extraName: { fontWeight: 900 },
-    extraPrice: { color: "rgba(255,215,0,.90)", fontWeight: 900 },
-    totals: {
-      marginTop: 14,
-      borderRadius: 18,
-      border: "1px solid rgba(255,215,0,.20)",
-      background: "linear-gradient(180deg, rgba(255,215,0,.10), rgba(0,0,0,0))",
-      padding: 14,
-      display: "grid",
-      gap: 10,
-    },
-    totalsRow: { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" },
-    bigMoney: { fontSize: 42, fontWeight: 900, letterSpacing: -0.6, color: "rgba(255,255,255,.95)" },
-    depositMoney: { fontSize: 22, fontWeight: 900, color: "rgba(255,215,0,.92)" },
-    ctaRow: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 },
-    ctaWA: {
-      background: "linear-gradient(90deg, rgba(255,215,0,.95), rgba(190,150,45,.95))",
-      color: "#111",
-      borderRadius: 16,
-      padding: "14px 14px",
-      fontWeight: 900,
-      textDecoration: "none",
-      textAlign: "center",
-      fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial',
-      border: "1px solid rgba(255,215,0,.25)",
-    },
-    ctaDisabled: {
-      background: "rgba(255,255,255,.06)",
-      color: "rgba(255,255,255,.55)",
-      borderRadius: 16,
-      padding: "14px 14px",
-      fontWeight: 900,
-      textDecoration: "none",
-      textAlign: "center",
-      fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial',
-      border: "1px solid rgba(255,255,255,.10)",
-    },
-    ctaCall: {
-      background: "rgba(255,255,255,.05)",
-      color: "rgba(255,255,255,.92)",
-      borderRadius: 16,
-      padding: "14px 14px",
-      fontWeight: 900,
-      textDecoration: "none",
-      textAlign: "center",
-      fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial',
-      border: "1px solid rgba(255,215,0,.18)",
-    },
-    note: { fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial', opacity: 0.75, fontSize: 12, lineHeight: 1.35 },
-    sideCard: {
-      background: "rgba(12,12,12,.92)",
-      border: "1px solid rgba(255,215,0,.16)",
-      borderRadius: 18,
-      padding: 16,
-      display: "grid",
-      gap: 12,
-      alignContent: "start",
-      height: "fit-content",
-    },
-    sideTitle: { fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial', fontSize: 18, fontWeight: 900 },
-    sideList: { margin: 0, paddingLeft: 18, opacity: 0.92, fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial' },
-    contactBox: {
-      borderRadius: 16,
-      border: "1px solid rgba(255,255,255,.10)",
-      background: "rgba(255,255,255,.03)",
-      padding: 12,
-      display: "grid",
-      gap: 8,
-      fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial',
-    },
-    link: { color: "rgba(120,190,255,.95)", textDecoration: "none", fontWeight: 800 },
-    footer: { opacity: 0.5, fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial', fontSize: 12, marginTop: 14 },
-  };
-
-  // Active package styling (computed, not inside styles)
-  function pkgStyle(key: PackageKey): React.CSSProperties {
-    const active = key === activePkg;
-    return {
-      ...styles.pkgCard,
-      border: active ? "1px solid rgba(255,215,0,.45)" : styles.pkgCard.border,
-      background: active ? "rgba(255,215,0,.08)" : styles.pkgCard.background,
-      transform: active ? "translateY(-1px)" : "none",
-    };
-  }
-
-  // CTA enabled only if date valid + required fields
-  const canSend = !!pickup.trim() && !!dropoff.trim() && !!dateISO && !dateInvalid;
+  const waHref = `https://wa.me/${WHATSAPP_PHONE_DIGITS}?text=${encodeURIComponent(waText)}`;
+  const telHref = `tel:${WHATSAPP_PHONE_DIGITS}`;
 
   return (
-    <main style={styles.page}>
-      <div style={gridShellStyle}>
-        {/* LEFT MAIN */}
-        <div>
-          <section style={{ ...styles.card, ...styles.topCard }}>
-            <div style={styles.topRow}>
-              <div style={styles.brand}>
-                <div style={styles.logoBox}>
-                  <img
-                    src="/elephant.png"
-                    alt="A&K"
-                    style={styles.logoImg}
-                    onError={(e) => ((e.currentTarget.style.display = "none"))}
+  <main className="bg-red-500 text-white p-10">
+      {/* Top bar */}
+      <header className="sticky top-0 z-20 border-b border-zinc-200 bg-white/80 backdrop-blur">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-3">
+            <div className="rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm">
+              <Image
+                src="/elephant.png"
+                alt="A&K logo"
+                width={44}
+                height={44}
+                className="rounded-full bg-white p-1"
+                priority
+              />
+            </div>
+            <div className="leading-tight">
+              <div className="text-sm font-semibold">A&K All Services, Inc.</div>
+              <div className="text-xs text-zinc-500">{DISPLAY_PHONE}</div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-zinc-500">{t.fields.lang}</span>
+            <select
+              value={lang}
+              onChange={(e) => setLang(e.target.value as Lang)}
+              className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
+            >
+              <option value="en">EN</option>
+              <option value="es">ES</option>
+            </select>
+          </div>
+        </div>
+      </header>
+
+      {/* HERO */}
+      <section className="mx-auto max-w-5xl px-4 py-10">
+        <div className="rounded-3xl border border-zinc-200 bg-gradient-to-b from-zinc-50 to-white p-8 shadow-sm">
+          <div className="flex flex-col items-center text-center">
+            <Image src="/elephant.png" alt="A&K logo" width={96} height={96} className="rounded-full bg-white p-2 shadow-sm ring-1 ring-black/10" />
+            <h1 className="mt-5 text-3xl font-semibold tracking-tight">A&K All Services, Inc.</h1>
+            <p className="mt-3 max-w-2xl text-sm text-zinc-600">{t.brandLine}</p>
+            <p className="mt-2 text-xs text-zinc-500">{t.areasLine}</p>
+            <p className="mt-1 text-xs text-zinc-500">{t.nowServing}</p>
+
+            <div className="mt-7 w-full border-t border-zinc-200 pt-6">
+              <h2 className="text-xl font-semibold">{t.choose}</h2>
+              <p className="mt-1 text-sm text-zinc-600">{t.tapToOpen}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* PACKAGES */}
+      <section className="mx-auto max-w-5xl px-4 pb-10">
+        <div className="grid gap-4 md:grid-cols-3">
+          {(["base", "standard", "premium"] as PackageKey[]).map((k) => {
+            const p = PACKAGES[k];
+            const active = selected === k;
+            return (
+              <button
+                key={k}
+                onClick={() => setSelected(k)}
+                className={[
+                  "rounded-3xl border p-5 text-left shadow-sm transition",
+                  active ? "border-amber-300 ring-2 ring-amber-200 bg-amber-50/40" : "border-zinc-200 bg-white hover:bg-zinc-50",
+                ].join(" ")}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-lg font-semibold">{p.label[lang]}</div>
+                    <div className="mt-1 text-sm text-zinc-600">{p.short[lang]}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-semibold text-amber-600">{money(p.price)}</div>
+                    <div className="text-xs text-zinc-500">{p.includedMiles} mi incl.</div>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex gap-2">
+                  <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs text-zinc-700">
+                    {k === "base" ? (lang === "en" ? "Essential" : "Esencial") : k === "standard" ? (lang === "en" ? "Pro" : "Pro") : "Premium"}
+                  </span>
+                  <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs text-zinc-700">
+                    {lang === "en" ? "Tap for details" : "Toca para detalles"}
+                  </span>
+                </div>
+
+                <div className="mt-4">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOpenDetails(openDetails === k ? null : k);
+                    }}
+                    className="text-sm font-medium text-zinc-900 underline underline-offset-4"
+                  >
+                    {openDetails === k ? t.buttons.close : t.buttons.openDetails}
+                  </button>
+
+                  {openDetails === k && (
+                    <div className="mt-4 grid gap-4 rounded-2xl border border-zinc-200 bg-white p-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <div className="text-sm font-semibold">{lang === "en" ? "Includes" : "Incluye"}</div>
+                          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-zinc-700">
+                            {p.includes[lang].map((it) => (
+                              <li key={it}>{it}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div>
+                          <div className="text-sm font-semibold">{lang === "en" ? "Does not include" : "No incluye"}</div>
+                          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-zinc-700">
+                            {p.excludes[lang].map((it) => (
+                              <li key={it}>{it}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* EXTRAS + LOCAL DETECTION */}
+      <section className="mx-auto max-w-5xl px-4 pb-10">
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
+            <h3 className="text-lg font-semibold">{t.extrasTitle}</h3>
+            <p className="mt-1 text-sm text-zinc-600">{t.extrasNote}</p>
+
+            <div className="mt-5 grid gap-3">
+              {/* qty extras */}
+              {EXTRAS.filter((x) => x.type === "qty").map((ex) => (
+                <div key={ex.key} className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+                  <div>
+                    <div className="text-sm font-semibold">{lang === "en" ? ex.en : ex.es}</div>
+                    <div className="text-xs text-zinc-600">{money(ex.price)} / {lang === "en" ? "each" : "c/u"}</div>
+                  </div>
+                  <input
+                    type="number"
+                    min={0}
+                    value={extraQty[ex.key] || 0}
+                    onChange={(e) => setExtraQty((s) => ({ ...s, [ex.key]: Number(e.target.value || 0) }))}
+                    className="w-24 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-right"
                   />
                 </div>
-                <div style={styles.brandText}>
-                  <div style={styles.company}>A&K All Services, Inc.</div>
-                  <div style={styles.sub}>{t.brandLine}</div>
-                </div>
-              </div>
+              ))}
 
-              <div style={styles.langWrap}>
-                <div style={styles.langLabel}>{t.language}</div>
-                <select value={lang} onChange={(e) => setLang(e.target.value as Lang)} style={styles.select} aria-label="language">
-                  <option value="en">EN</option>
-                  <option value="es">ES</option>
-                </select>
-              </div>
-            </div>
-
-            <div style={styles.hero}>
-              <div style={styles.headline}>{t.headline}</div>
-              <div style={styles.subhead}>{t.subhead}</div>
-
-              <div style={styles.chips}>
-                <div style={styles.chip}>{t.chip1}</div>
-                <div style={styles.chip}>{t.chip2}</div>
-                <div style={styles.chip}>{t.chip3}</div>
-              </div>
-            </div>
-          </section>
-
-          <section style={styles.card}>
-            <div style={styles.sectionTitle}>{t.getEstimate}</div>
-
-            {/* Package selector */}
-            <div style={styles.label}>{t.package}</div>
-            <div style={pkgRowStyle}>
-              {(["base", "standard", "premium"] as PackageKey[]).map((k) => (
-                <div key={k} style={pkgStyle(k)} onClick={() => setActivePkg(k)} role="button" aria-label={`package-${k}`}>
-                  <div style={styles.pkgName}>{lang === "en" ? PACKAGES[k].label.en : PACKAGES[k].label.es}</div>
-                  <div style={styles.pkgPrice}>{money(PACKAGES[k].price)}</div>
-                  <div style={{ ...styles.hint, marginTop: 6 }}>{lang === "en" ? PACKAGES[k].short.en : PACKAGES[k].short.es}</div>
-                </div>
+              {/* toggle extras */}
+              {EXTRAS.filter((x) => x.type === "toggle").map((ex) => (
+                <label key={ex.key} className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+                  <div>
+                    <div className="text-sm font-semibold">{lang === "en" ? ex.en : ex.es}</div>
+                    <div className="text-xs text-zinc-600">{money(ex.price)}</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={!!extraToggle[ex.key]}
+                    onChange={(e) => setExtraToggle((s) => ({ ...s, [ex.key]: e.target.checked }))}
+                    className="h-5 w-5 accent-amber-600"
+                  />
+                </label>
               ))}
             </div>
+          </div>
 
-            {/* Inputs */}
-            <div style={styles.fields}>
-              <div style={styles.field}>
-                <div style={styles.label}>{t.beds}</div>
-                <select
-                  value={beds}
-                  onChange={(e) => setBeds(clampInt(e.target.value, 1, 10))}
-                  style={styles.input}
-                  aria-label="bedrooms"
-                >
-                  {Array.from({ length: 10 }).map((_, i) => (
-                    <option key={i + 1} value={i + 1}>
-                      {i + 1}
-                    </option>
-                  ))}
-                </select>
+          <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
+            <h3 className="text-lg font-semibold">{t.localDetect}</h3>
+            <p className="mt-1 text-sm text-zinc-600">{t.localBand}</p>
+
+            <div className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+              <div className="text-sm font-semibold">{isLocal ? t.localYes : t.localNo}</div>
+              <div className="mt-2 text-sm text-zinc-700">
+                {lang === "en"
+                  ? `Local cap is ${LOCAL_MAX} miles. If miles are above ${LOCAL_MAX}, we switch to long-distance estimator.`
+                  : `El tope local es ${LOCAL_MAX} millas. Si pasa de ${LOCAL_MAX}, cambia a estimado de viaje largo.`}
+              </div>
+              <div className="mt-2 text-xs text-zinc-600">
+                {lang === "en"
+                  ? `Tip: keep most “local” jobs between ${LOCAL_MIN}–${LOCAL_MAX} miles for clean pricing.`
+                  : `Tip: mantén lo “local” entre ${LOCAL_MIN}–${LOCAL_MAX} millas para precio limpio.`}
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-4">
+              <h4 className="text-sm font-semibold">{t.longTitle}</h4>
+              <p className="mt-1 text-sm text-zinc-600">{t.longNote}</p>
+              <div className="mt-3 text-sm">
+                <span className="font-semibold">{lang === "en" ? "Range:" : "Rango:"}</span>{" "}
+                {money(LD_MIN)} – {money(LD_MAX)}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CALCULATOR */}
+      <section className="mx-auto max-w-5xl px-4 pb-14">
+        <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
+          <h3 className="text-lg font-semibold">{t.calculatorTitle}</h3>
+          <p className="mt-1 text-sm text-zinc-600">{t.calcNote}</p>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4">
+              <div className="grid gap-2">
+                <label className="text-sm text-zinc-700">{t.fields.bedrooms}</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={bedrooms}
+                  onChange={(e) => setBedrooms(Math.max(1, Number(e.target.value || 1)))}
+                  className="rounded-2xl border border-zinc-200 bg-white px-4 py-3"
+                />
               </div>
 
-              <div style={styles.field}>
-                <div style={styles.label}>{t.stairsAccess}</div>
-                <select
-                  value={stairs}
-                  onChange={(e) => setStairs(clampInt(e.target.value, 0, 8))}
-                  style={styles.input}
-                  aria-label="stairs"
-                  disabled={hasElevator}
-                >
-                  {Array.from({ length: 9 }).map((_, i) => (
-                    <option key={i} value={i}>
-                      {i}
-                    </option>
-                  ))}
-                </select>
-                <div style={styles.hint}>
-                  {hasElevator ? (lang === "en" ? "Disabled because elevator is on." : "Desactivado porque hay elevador.") : ""}
-                </div>
-              </div>
-
-              <div style={styles.field}>
-                <div style={styles.label}>{t.miles}</div>
+              <div className="grid gap-2">
+                <label className="text-sm text-zinc-700">{t.fields.stairs}</label>
                 <input
                   type="number"
                   min={0}
-                  value={totalMiles}
-                  onChange={(e) => setTotalMiles(clampInt(e.target.value, 0, 999))}
-                  style={styles.input}
-                  inputMode="numeric"
+                  value={stairs}
+                  onChange={(e) => setStairs(Math.max(0, Number(e.target.value || 0)))}
+                  className="rounded-2xl border border-zinc-200 bg-white px-4 py-3"
                 />
-                <div style={styles.hint}>
-                  {t.included}. {extraMiles > 0 ? `${t.extraMiles}: ${extraMiles} x ${money(EXTRA_MILE_PRICE)} = ${money(milesFee)}` : `${t.extraMiles}: ${money(0)}`}
+              </div>
+
+              <label className="flex items-center gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={elevator}
+                  onChange={(e) => setElevator(e.target.checked)}
+                  className="h-5 w-5 accent-amber-600"
+                />
+                <span className="text-sm text-zinc-800">{t.fields.elevator}</span>
+              </label>
+
+              <div className="grid gap-2">
+                <label className="text-sm text-zinc-700">{t.fields.miles}</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={miles}
+                  onChange={(e) => setMiles(Math.max(1, Number(e.target.value || 1)))}
+                  className="rounded-2xl border border-zinc-200 bg-white px-4 py-3"
+                />
+                <div className="text-xs text-zinc-600">
+                  {lang === "en"
+                    ? `Included: ${pkg.includedMiles} mi. Extra miles: $${EXTRA_MILE_PRICE}/mi.`
+                    : `Incluye: ${pkg.includedMiles} mi. Millas extra: $${EXTRA_MILE_PRICE}/milla.`}
                 </div>
               </div>
+            </div>
 
-              <div style={styles.field}>
-                <div style={styles.label}>{t.elevator}</div>
-                <label style={styles.check}>
-                  <input
-                    type="checkbox"
-                    checked={hasElevator}
-                    onChange={(e) => setHasElevator(e.target.checked)}
-                  />
-                  <span>{lang === "en" ? "Elevator OK" : "Hay elevador"}</span>
-                </label>
-              </div>
-
-              <div style={styles.field}>
-                <div style={styles.label}>{t.date}</div>
+            <div className="grid gap-4">
+              <div className="grid gap-2">
+                <label className="text-sm text-zinc-700">{t.fields.day}</label>
                 <input
                   type="date"
-                  value={dateISO}
-                  onChange={(e) => setDateISO(e.target.value)}
-                  style={styles.input}
+                  value={day}
+                  onChange={(e) => setDay(e.target.value)}
+                  className="rounded-2xl border border-zinc-200 bg-white px-4 py-3"
                 />
-                <div style={styles.hint}>
-                  {dateISO && isSunday(dateISO) ? t.noSunday : dateISO && isPastDate(dateISO) ? (lang === "en" ? "Date must be today or later." : "La fecha debe ser hoy o después.") : dateBlocked ? t.notAvailable : ""}
-                </div>
               </div>
 
-              <div style={styles.field}>
-                <div style={styles.label}>{t.time}</div>
-                <select value={timeStr} onChange={(e) => setTimeStr(e.target.value)} style={styles.input} aria-label="time">
-                  {["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00"].map((v) => (
-                    <option key={v} value={v}>
-                      {v}
-                    </option>
-                  ))}
-                </select>
+              <div className="grid gap-2">
+                <label className="text-sm text-zinc-700">{t.fields.time}</label>
+                <input
+                  type="time"
+                  value={time}
+                  onChange={(e) => setTime(e.target.value)}
+                  className="rounded-2xl border border-zinc-200 bg-white px-4 py-3"
+                />
               </div>
 
-              <div style={{ ...styles.field, gridColumn: isMobile ? "auto" : "1 / -1" }}>
-                <div style={styles.label}>{t.pickup}</div>
-                <input value={pickup} onChange={(e) => setPickup(e.target.value)} style={styles.input} placeholder={lang === "en" ? "Street, City, ZIP" : "Calle, Ciudad, ZIP"} />
+              <div className="grid gap-2">
+                <label className="text-sm text-zinc-700">{t.fields.pickup}</label>
+                <input
+                  value={pickup}
+                  onChange={(e) => setPickup(e.target.value)}
+                  placeholder={lang === "en" ? "Street, City, ZIP" : "Calle, Ciudad, ZIP"}
+                  className="rounded-2xl border border-zinc-200 bg-white px-4 py-3"
+                />
               </div>
 
-              <div style={{ ...styles.field, gridColumn: isMobile ? "auto" : "1 / -1" }}>
-                <div style={styles.label}>{t.dropoff}</div>
-                <input value={dropoff} onChange={(e) => setDropoff(e.target.value)} style={styles.input} placeholder={lang === "en" ? "Street, City, ZIP" : "Calle, Ciudad, ZIP"} />
+              <div className="grid gap-2">
+                <label className="text-sm text-zinc-700">{t.fields.dropoff}</label>
+                <input
+                  value={dropoff}
+                  onChange={(e) => setDropoff(e.target.value)}
+                  placeholder={lang === "en" ? "Street, City, ZIP" : "Calle, Ciudad, ZIP"}
+                  className="rounded-2xl border border-zinc-200 bg-white px-4 py-3"
+                />
               </div>
             </div>
+          </div>
 
-            {/* Extras */}
-            <div style={{ ...styles.sectionTitle, marginTop: 16 }}>{t.extras}</div>
-            <div style={styles.extrasGrid}>
-              {EXTRAS.map((item) => (
-                <div key={item.key} style={styles.extraCard}>
-                  <div style={styles.extraTop}>
-                    <div style={styles.extraName}>{lang === "en" ? item.en : item.es}</div>
-                    <div style={styles.extraPrice}>{money(item.price)}</div>
-                  </div>
+          {/* SUMMARY */}
+          <div className="mt-7 rounded-3xl border border-amber-200 bg-amber-50/40 p-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+              <div>
+                <div className="text-sm text-zinc-700">{t.labels.estimatedTotal}</div>
+                <div className="mt-1 text-4xl font-semibold text-zinc-900">{money(finalEstimate)}</div>
+                <div className="mt-2 text-sm text-zinc-700">
+                  {lang === "en"
+                    ? `Deposit (30%) to reserve: ${money(deposit)}`
+                    : `Depósito (30%) para reservar: ${money(deposit)}`}
+                </div>
 
-                  {item.type === "qty" ? (
-                    <input
-                      type="number"
-                      min={0}
-                      value={extrasQty[item.key] || 0}
-                      onChange={(e) =>
-                        setExtrasQty((p) => ({ ...p, [item.key]: clampInt(e.target.value, 0, 999) }))
-                      }
-                      style={styles.input}
-                      inputMode="numeric"
-                    />
+                <div className="mt-3 text-xs text-zinc-600 space-y-1">
+                  {isLocal ? (
+                    <>
+                      <div>• {includedMilesLine}</div>
+                      <div>• {extraMilesLine}</div>
+                      <div>• {bedroomLine}</div>
+                      {stairsFee > 0 && <div>• {stairsLine}</div>}
+                      {extrasTotal > 0 && <div>• Extras: {money(extrasTotal)}</div>}
+                    </>
                   ) : (
-                    <label style={styles.check}>
-                      <input
-                        type="checkbox"
-                        checked={!!extrasToggle[item.key]}
-                        onChange={(e) => setExtrasToggle((p) => ({ ...p, [item.key]: e.target.checked }))}
-                      />
-                      <span>{lang === "en" ? "Add" : "Agregar"}</span>
-                    </label>
+                    <>
+                      <div>• {t.labels.longDistanceEstimate}: {money(longDistanceEstimate)}</div>
+                      <div>• {lang === "en" ? "Reservation required 5–7 days in advance." : "Reserva requerida 5–7 días antes."}</div>
+                    </>
                   )}
                 </div>
-              ))}
-            </div>
-
-            {/* Totals + CTA */}
-            <div style={styles.totals}>
-              <div style={styles.totalsRow}>
-                <div>
-                  <div style={styles.label}>{t.total}</div>
-                  <div style={styles.bigMoney}>{money(estimate)}</div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={styles.label}>{t.deposit}</div>
-                  <div style={styles.depositMoney}>{money(deposit)}</div>
-                  <div style={styles.hint}>{t.depositNote}</div>
-                </div>
               </div>
 
-              <div style={styles.ctaRow}>
+              <div className="flex flex-col gap-3 md:flex-row">
                 <a
-                  href={canSend ? whatsappLink : undefined}
-                  style={canSend ? styles.ctaWA : styles.ctaDisabled}
-                  onClick={(e) => {
-                    if (!canSend) e.preventDefault();
-                  }}
+                  href={waHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-2xl bg-zinc-900 px-5 py-3 text-center text-sm font-semibold text-white hover:bg-zinc-800"
                 >
-                  {t.ctaWA}
+                  {t.buttons.whatsapp}
                 </a>
-                <a href={`tel:${PHONE_E164}`} style={styles.ctaCall}>
-                  {t.ctaCall}
+                <a
+                  href={telHref}
+                  className="rounded-2xl border border-zinc-300 bg-white px-5 py-3 text-center text-sm font-semibold text-zinc-900 hover:bg-zinc-50"
+                >
+                  {t.buttons.call}
                 </a>
               </div>
-
-              <div style={styles.note}>{t.note}</div>
             </div>
-          </section>
 
-          <div style={styles.footer}>© {new Date().getFullYear()} A&K All Services, Inc.</div>
+            <div className="mt-4 text-xs text-zinc-600">
+              {t.calcNote}
+            </div>
+          </div>
         </div>
+      </section>
 
-        {/* RIGHT SIDE */}
-        <aside style={styles.sideCard}>
-          <div>
-            <div style={styles.sideTitle}>{t.whyTitle}</div>
-            <ul style={styles.sideList}>
-              {t.why.map((x) => (
-                <li key={x}>{x}</li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <div style={styles.sideTitle}>{t.areasTitle}</div>
-            <ul style={styles.sideList}>
-              {t.areas.map((x) => (
-                <li key={x}>{x}</li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <div style={styles.sideTitle}>{t.contactTitle}</div>
-            <div style={styles.contactBox}>
-              <div>
-                WhatsApp:{" "}
-                <a style={styles.link} href={`https://wa.me/${PHONE_E164}`}>
-                  {DISPLAY_PHONE}
-                </a>
-              </div>
-              <div style={{ opacity: 0.85 }}>
-                {lang === "en"
-                  ? "Deposit via Zelle (we send details on WhatsApp)."
-                  : "Depósito por Zelle (te mandamos los datos por WhatsApp)."}
-              </div>
-              {dateInvalid && dateISO ? (
-                <div style={{ color: "rgba(255,120,120,.95)", fontWeight: 800 }}>
-                  {isSunday(dateISO) ? t.noSunday : t.notAvailable}
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </aside>
-      </div>
+      {/* FOOTER */}
+      <footer className="border-t border-zinc-200 bg-white">
+        <div className="mx-auto max-w-5xl px-4 py-8 text-xs text-zinc-500">
+          © 2026 A&K All Services, Inc.
+        </div>
+      </footer>
     </main>
   );
 }
