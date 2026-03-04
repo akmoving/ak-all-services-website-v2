@@ -1,3 +1,268 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+html, body{
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+main, .wrap{
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+/* Reset */
+*{
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+}
+
+body{
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background:#ffffff;
+  color:#0b0b0b;
+}
+
+/* === Apple-like hero === */
+.hero{
+  padding: 96px 18px 40px;
+  text-align: center;
+  background: linear-gradient(
+    180deg,
+    #ffffff 0%,
+    #f6f6f4 55%,
+    #ecebe7 100%
+  );
+}
+
+.logoWrap{
+  width: 120px;
+  height: 120px;
+  margin: 0 auto 20px;
+
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 30% 30%,
+    #1a1a1a,
+    #0b0b0c
+  );
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border: 2px solid rgba(184,134,11,.55);
+  box-shadow:
+    0 20px 60px rgba(0,0,0,.25),
+    0 0 40px rgba(184,134,11,.25);
+}
+
+.heroLogo{
+  width: 70px;
+  height: auto;
+  display: block;
+}
+
+.heroTitle{
+  margin: 10px 0 6px;
+  font-size: clamp(34px, 5vw, 54px);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  color: #0b0b0b;
+}
+
+.heroSub{
+  margin: 0 auto;
+  max-width: 880px;
+  font-size: clamp(14px, 2.2vw, 18px);
+  font-weight: 400;
+  line-height: 1.45;
+  color: rgba(11,11,11,.72);
+}
+
+.heroMeta{
+  margin-top: 14px;
+  font-size: 13px;
+  color: rgba(11,11,11,.55);
+}
+/* ===== PREMIUM ADDONS (LIGHT THEME) ===== */
+
+.addonCard{
+  border:1px solid #e5e5e7;
+  background:#ffffff;
+  padding:20px;
+  border-radius:18px;
+  transition: all .2s ease;
+}
+
+.addonCard:hover{
+  border:1px solid #d0d0d5;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.06);
+  transform: translateY(-2px);
+}
+
+.addonTop{
+  display:flex;
+  justify-content:space-between;
+  gap:14px;
+  align-items:flex-start;
+  margin-bottom:10px;
+}
+
+.addonTitle{
+  font-weight:600;
+  letter-spacing:.2px;
+  font-size:1.05rem;
+  color:#111;
+}
+
+.addonPrice{
+  font-weight:700;
+  white-space:nowrap;
+  font-size:1.05rem;
+  color:#000;
+}
+
+.addonDesc{
+  color:#6b6b6b;
+  font-size:.95rem;
+  line-height:1.5rem;
+}
+/* ===== PREMIUM INPUT EXTRAS ===== */
+
+.field{
+  margin-bottom:18px;
+}
+
+.field label{
+  font-weight:600;
+  font-size:1rem;
+  color:#111;
+  display:block;
+  margin-bottom:8px;
+}
+
+.field input{
+  width:100%;
+  padding:14px 16px;
+  border-radius:14px;
+  border:1px solid #e2e2e6;
+  background:#ffffff;
+  font-size:1rem;
+  transition:all .2s ease;
+}
+
+.field input:focus{
+  outline:none;
+  border:1px solid #c9a227;
+  box-shadow:0 0 0 3px rgba(201,162,39,0.15);
+}
+:root{
+  --bg: #fbfbfb;
+  --card:#ffffff;
+  --text:#0b0b0b;
+  --muted:#5e5e5e;
+  --line: rgba(0,0,0,.08);
+  --gold1:#c9a227;
+  --gold2:#e6c75a;
+  --shadow: 0 12px 40px rgba(0,0,0,.08);
+}
+
+body{
+  background: radial-gradient(1200px 600px at 50% -200px, rgba(201,162,39,.18), transparent 60%),
+              linear-gradient(#ffffff, var(--bg));
+  color: var(--text);
+}
+
+.sectionTitle{
+  font-size: clamp(22px, 2.2vw, 30px);
+  letter-spacing:.2px;
+  margin: 8px 0 6px;
+}
+.sectionNote{
+  color: var(--muted);
+  max-width: 900px;
+}
+.card{
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+
+  width:100%;
+  max-width:100%;
+  overflow:hidden;
+  box-sizing:border-box;
+}
+
+.cardGold{
+  position: relative;
+  overflow:hidden;
+}
+.cardGold::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  padding:1px;
+  border-radius:18px;
+  background: linear-gradient(135deg, var(--gold1), var(--gold2));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events:none;
+}
+
+.badge{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 12px;
+  border-radius: 999px;
+  border:1px solid var(--line);
+  background: rgba(255,255,255,.7);
+  backdrop-filter: blur(10px);
+  color:#1b1b1b;
+  font-size:.92rem;
+}
+
+.heroSub{ color: var(--muted); margin-top:12px; }
+.heroBadges{ margin-top:14px; display:flex; gap:10px; flex-wrap:wrap; }
+
+.btnPrimary{
+  border-radius:14px;
+  padding:12px 16px;
+  border:1px solid rgba(201,162,39,.35);
+  background: linear-gradient(135deg, rgba(201,162,39,.16), rgba(230,199,90,.10));
+  box-shadow: 0 10px 30px rgba(201,162,39,.18);
+}
+
+.btnWhats{
+  border-radius:16px;
+  padding:14px 18px;
+  border:1px solid rgba(201,162,39,.45);
+  background: linear-gradient(135deg, rgba(201,162,39,.22), rgba(230,199,90,.12));
+  box-shadow: 0 14px 40px rgba(0,0,0,.12);
+  font-weight:600;
+}
+
+.smallPrint{ color: var(--muted); font-size:.92rem; line-height:1.35; }
+.brandAuthority{
+  margin-top:6px;
+  font-size:.85rem;
+  letter-spacing:.6px;
+  color:#7a7a7a;
+  font-weight:500;
+}
+
+/* Fix: WhatsApp preview box (pre) so it wraps and never overflows */
+.previewBox{
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+
+  overflow-x: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+
+  margin: 0;
+}
