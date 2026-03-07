@@ -1,165 +1,151 @@
+"use client";
+
+import { useState } from "react";
 import "./booking-preview.css";
 
+import { BookingPricing } from "./components/BookingPricing";
+import { BookingLongDistance } from "./components/BookingLongDistance";
 import { MovingDetailsForm } from "./components/MovingDetailsForm";
 import { BookingSummary } from "./components/BookingSummary";
 import { BookingCalendarEmbed } from "./components/BookingCalendarEmbed";
 import { BookingTerms } from "./components/BookingTerms";
 
+type PackageKey = "base" | "standard" | "premium";
+
 export default function BookingPreviewPage() {
+  const [selectedPackage, setSelectedPackage] =
+    useState<PackageKey>("standard");
+
   return (
     <main className="booking-preview-page">
       <section className="booking-shell">
-        <section className="booking-hero-v2">
-          <div className="booking-hero-v2__content">
-            <span className="booking-kicker">A&K All Services, Inc.</span>
+        <section className="booking-top-frame">
+          <div className="booking-top-frame__main">
+            <div className="booking-top-frame__eyebrow">
+              <span className="booking-kicker">A&K All Services, Inc.</span>
+              <span className="booking-top-frame__status">
+                Premium moving booking preview
+              </span>
+            </div>
 
             <h1 className="booking-main-title">
-              Premium moving, built with structure, clarity, and control.
+              Structured moving reservations for clients who expect a serious company.
             </h1>
 
             <p className="booking-main-text">
-              Reserve your move through a cleaner premium flow: clear service
-              options, organized details, visible pricing logic, and a smoother
-              booking experience from top to bottom.
+              Clean pricing, organized intake, protected scheduling, legal
+              confirmation, and a more premium reservation flow from start to finish.
             </p>
 
             <div className="booking-top-badges">
-              <span className="booking-top-badge">Trust first</span>
-              <span className="booking-top-badge">Pricing with clarity</span>
+              <span className="booking-top-badge">Licensed structure</span>
+              <span className="booking-top-badge">Deposit to reserve</span>
               <span className="booking-top-badge">8:00 AM start</span>
               <span className="booking-top-badge">1 move per day</span>
             </div>
           </div>
 
-          <div className="booking-hero-v2__side">
+          <div className="booking-top-frame__side">
             <div className="booking-metric-card booking-metric-card--dark">
               <span className="booking-metric-label">Positioning</span>
               <strong className="booking-metric-value">
                 Premium / Clear / Controlled
               </strong>
               <p className="booking-metric-text">
-                The page should feel expensive, calm, and easy to understand.
-                No visual noise. No chaos. No cheap energy.
+                The booking experience should feel calm, expensive, and
+                organized. No noise. No desperate energy. No messy flow.
               </p>
             </div>
 
             <div className="booking-metric-card booking-metric-card--dark">
-              <span className="booking-metric-label">Core rule</span>
+              <span className="booking-metric-label">Operating rule</span>
               <strong className="booking-metric-value">
-                Deposit required to reserve
+                Reservation becomes real after deposit, terms, and signature
               </strong>
               <p className="booking-metric-text">
-                The client should understand the flow fast: offer first,
-                details second, summary third, date fourth, legal confirmation last.
+                The flow is designed to feel like a real company process, not a
+                random quote form pasted into a page.
               </p>
             </div>
           </div>
         </section>
 
-        <section className="booking-section-card booking-section-card--pricing">
+        <section className="booking-section-card booking-section-card--trust">
           <div className="booking-section-head">
             <div>
-              <span className="booking-section-kicker">Pricing / Packages</span>
+              <span className="booking-section-kicker">Company foundation</span>
               <h2 className="booking-section-title">
-                Choose the service level that fits your move
+                Institutional clarity before sales pressure
               </h2>
               <p className="booking-section-text">
-                This is the money section. It has to feel clear, premium, and
-                easy to compare. The client should understand the difference
-                between options in seconds.
+                The first screen should establish who we are, how reservations
+                work, and why the process feels structured. Trust first. Then
+                pricing. Then booking.
               </p>
             </div>
           </div>
 
-          <div className="booking-pricing-grid">
-            <article className="booking-price-card booking-price-card--base">
-              <div className="booking-price-card__top">
-                <span className="booking-price-chip">Base</span>
-                <strong className="booking-price-from">From $1,050</strong>
-              </div>
-
-              <h3 className="booking-price-title">Entry package</h3>
-              <p className="booking-price-text">
-                Clean, straightforward moving support for clients who want the
-                essentials done professionally.
+          <div className="booking-trust-grid">
+            <article className="booking-trust-card booking-trust-card--dark">
+              <span className="booking-trust-card__kicker">Policy baseline</span>
+              <h3 className="booking-trust-card__title">
+                Deposit required to hold the date
+              </h3>
+              <p className="booking-trust-card__text">
+                The date is not reserved by conversation alone. The reservation
+                becomes protected only after the deposit and required acceptance steps.
               </p>
-
-              <ul className="booking-price-list">
-                <li>Truck + crew + moving equipment</li>
-                <li>Loading and unloading</li>
-                <li>Basic furniture protection</li>
-                <li>20 included miles</li>
-              </ul>
-
-              <button className="booking-price-button" type="button">
-                Explore package
-              </button>
             </article>
 
-            <article className="booking-price-card booking-price-card--featured">
-              <div className="booking-price-card__top">
-                <span className="booking-price-chip booking-price-chip--gold">
-                  Best value
-                </span>
-                <strong className="booking-price-from">From $1,275</strong>
-              </div>
-
-              <h3 className="booking-price-title">Standard</h3>
-              <p className="booking-price-text">
-                The strongest balance between price, protection, presentation,
-                and overall customer value.
+            <article className="booking-trust-card">
+              <span className="booking-trust-card__kicker">Operational clarity</span>
+              <h3 className="booking-trust-card__title">
+                Every move starts with structure
+              </h3>
+              <p className="booking-trust-card__text">
+                One moving job per day per crew, fixed 8:00 AM standard start,
+                clear scheduling rules, and a stronger premium intake flow.
               </p>
-
-              <ul className="booking-price-list">
-                <li>Everything in Base</li>
-                <li>Stronger protection & handling</li>
-                <li>Higher overall service value</li>
-                <li>25 included miles</li>
-              </ul>
-
-              <button
-                className="booking-price-button booking-price-button--gold"
-                type="button"
-              >
-                Explore package
-              </button>
             </article>
 
-            <article className="booking-price-card booking-price-card--premium">
-              <div className="booking-price-card__top">
-                <span className="booking-price-chip booking-price-chip--glass">
-                  Premium
-                </span>
-                <strong className="booking-price-from">From $1,475</strong>
-              </div>
-
-              <h3 className="booking-price-title">Higher-touch service</h3>
-              <p className="booking-price-text">
-                Built for clients who want the strongest presentation, smoother
-                handling, and a more complete premium offer.
+            <article className="booking-trust-card booking-trust-card--gold">
+              <span className="booking-trust-card__kicker">Legal protection</span>
+              <h3 className="booking-trust-card__title">
+                Terms, signature, and payment sequence
+              </h3>
+              <p className="booking-trust-card__text">
+                Final payment logic stays locked until policy acceptance and
+                signature are completed in the confirmation flow.
               </p>
-
-              <ul className="booking-price-list">
-                <li>Everything in Standard</li>
-                <li>Premium presentation & handling</li>
-                <li>Basic kitchen + fragile packing</li>
-                <li>30 included miles</li>
-              </ul>
-
-              <button className="booking-price-button" type="button">
-                Explore package
-              </button>
             </article>
           </div>
 
-          <div className="booking-pricing-note">
-            <p>
-              Packages will later become expandable cards with more detailed
-              breakdowns, but today we are locking the hierarchy, spacing, and
-              premium perception of this section.
-            </p>
+          <div className="booking-policy-strip">
+            <div className="booking-policy-item">
+              <span>Cancellation 3+ days</span>
+              <strong>100% refund</strong>
+            </div>
+            <div className="booking-policy-item">
+              <span>Cancellation at 48h</span>
+              <strong>80% refund</strong>
+            </div>
+            <div className="booking-policy-item">
+              <span>24h / same day</span>
+              <strong>Non-refundable</strong>
+            </div>
+            <div className="booking-policy-item">
+              <span>Full Packing</span>
+              <strong>2-day service</strong>
+            </div>
           </div>
         </section>
+
+        <BookingPricing
+          selectedPackage={selectedPackage}
+          onSelectPackage={setSelectedPackage}
+        />
+
+        <BookingLongDistance />
 
         <section className="booking-section-card booking-section-card--flow">
           <div className="booking-section-head">
@@ -204,7 +190,7 @@ export default function BookingPreviewPage() {
           </div>
 
           <div className="booking-right">
-            <BookingSummary />
+            <BookingSummary selectedPackage={selectedPackage} />
           </div>
         </section>
 
